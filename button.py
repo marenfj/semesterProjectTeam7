@@ -1,15 +1,14 @@
-from gpiozero import Button
-from signal import pause
-
-button = Button(2)  # GPIO pin 2
-
-def on_press():
-    print("Button pressed!") #need to add the blinking and noise functionality
-
-button.when_pressed = on_press 
+from sense_hat import SenseHat
 
 
-pause()
+sense = SenseHat()
+
+while True:
+    events = sense.stick.get_events()
+    if events:
+        print("Button pressed")
+        sense.showmessage("Button pressed", text_colour=[255, 0, 0])
+
 
 
 
