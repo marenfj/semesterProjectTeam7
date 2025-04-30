@@ -1,0 +1,25 @@
+Metadata-Version: 2.1
+Name: stmpy
+Version: 0.7.5
+Summary: Support for state machines
+Home-page: https://github.com/falkr/stmpy
+Author: Frank Alexander Kraemer
+Author-email: kraemer.frank@gmail.com
+License: MIT
+Download-URL: https://github.com/falkr/stmpy/archive/0.2.tar.gz
+Keywords: state machines,stm,automata
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Education
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+
+UNKNOWN
+
+
