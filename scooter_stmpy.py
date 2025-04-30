@@ -9,6 +9,8 @@ import json
 import os
 from sense_hat import SenseHat, ACTION_PRESSED
 import paho.mqtt.client as mqtt
+import keyboard
+from pynput import keyboard
 
 # Constants provided in the specification
 BROKER_ADDRESS = "mqtt20.iik.ntnu.no"
@@ -26,8 +28,8 @@ class Scooter:
         # Initialize Sense HAT and clear LEDs at startup
         self.sense = SenseHat()
         self.sense.clear()
-        print("Initial state!")
         self.id="scooter123"
+        self.quit_flag = False
         # Initialize MQTT client
         self.mqtt_client = mqtt.Client()
         self.mqtt_client.on_message = self.on_message
@@ -51,7 +53,7 @@ class Scooter:
         # Set up the joystick (middle button)
         # In IDLE, a press triggers alert mode.
         # In ALERT_PENDING, a press cancels the alert.
-        self.sense.stick.direction_middle = self.panic_button_pressed
+       
         
     def on_message(self, client, userdata, msg):
         message = msg.payload.decode('utf-8')
@@ -101,17 +103,28 @@ class Scooter:
     
     #e-scooteren er ledig, og lyser grønt
     def idle(self):
+        self.sense.stick.direction_middle = None
+        self.sense.stick.direction_left = None
+        self.sense.stick.direction_right = None
+        self.sense.stick.direction_up = None
+        self.sense.stick.direction_down = None
         green = (0, 255, 0)
         self.sense.clear(green)
-        input("Press any button to connect : ")
-        self.stm.send('user_connected')
+        def wait_for_input():
+            time.sleep(0.5)
+            while True:
+                user_input = input("Enter y to connect : ")
+                if user_input.strip().lower() == 'y':    
+                    print("User connected.")
+                    self.stm.send('user_connected')
+                    break
+        threading.Thread(target=wait_for_input).start()
         
     #stopper bare blinkingen
     def stop_alert(self):
         self.emergency = False
         off = (0, 0, 0)
         self.sense.clear(off)
-        print("stop_alert")
         
     def emergency_contacted(self):
         print("Playing notified sound")
@@ -121,14 +134,21 @@ class Scooter:
     def reset(self):
         off = (0, 0, 0)
         self.sense.clear(off)
-        try:
-            os.system("killall play")
-        except Exception as e:
-            print("Error stopping sound:", e)
-        print("Reset")
+        # try:
+        #     os.system("killall play")
+        # except Exception as e:
+        #     print("Error stopping sound:", e)
 
     def sensor_listening(self):
-        print("sensor_listening")
+        self.sense.stick.direction_middle = self.panic_button_pressed
+        self.sense.stick.direction_left = self.disconnect_user
+        self.sense.stick.direction_right = self.disconnect_user
+        self.sense.stick.direction_up = self.disconnect_user
+        self.sense.stick.direction_down = self.disconnect_user
+        # self.sense.stick.direction_left = self.idle() #men her får vi ikke brukt triggeren "user_disconnected" ...
+        # if self.sense.stick.direction_left:
+        #     self.stm.send("user_disconnected") #fungerer dette
+
         def monitoring():
             while True:
                 current_accel = self.get_current_acceleration()
@@ -136,6 +156,7 @@ class Scooter:
                     print(f"Crash detected! Acceleration: {current_accel:.2f}")
                     self.stm.send('sensor_spike')
                     break
+                    
                 time.sleep(0.1)
         threading.Thread(target=monitoring).start()
         
@@ -144,19 +165,27 @@ class Scooter:
             return
         if event.action == ACTION_PRESSED and self.emergency == False:
             print("Panic button pressed: starting alert mode.")
-            self.emergency = True
             self.stm.send('button_pressed')
+            self.emergency = True
             return
         if event.action == ACTION_PRESSED and self.emergency == True:
             print("Panic button pressed during alert: cancelling alert and sending cancellation message.")
             message = json.dumps({"cancel_emergency": "cancel_emergency"})
             self.mqtt_client.publish(TOPIC_ALERTS,message)
-            self.emergency = False
+            os.system("killall play")
+            os.system(f"play {CANCELLED_MP3_PATH}")
             self.stm.send('button_pressed')
+            self.emergency = False
             return
+
+    def disconnect_user(self, event):
+        if event.action == ACTION_PRESSED and (event.direction == "left" or event.direction == "right" or event.direction == "up" or event.direction == "down"):
+            print("dette er en test")
+            self.stm.send("user_disconnected")
+            return
+    
+    
             
-        
-        
 #test
 scooter = Scooter()
 
@@ -213,7 +242,7 @@ listeningButton = {
     "trigger": "button_pressed",
     "source": "emergencyTriggered",
     "target": "listening",
-    "effect": "stop_alert; send_to_server; sensor_listening; reset",
+    "effect": "stop_alert; sensor_listening; reset",
 }
 
 
