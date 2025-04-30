@@ -12,6 +12,9 @@ import paho.mqtt.client as mqtt
 import keyboard
 from pynput import keyboard
 
+#stty -echoctl <-- Kjør i terminal før demo
+
+
 # Constants provided in the specification
 BROKER_ADDRESS = "mqtt20.iik.ntnu.no"
 SCOOTER_ID = "scooter123"
@@ -103,43 +106,82 @@ class Scooter:
     
     #e-scooteren er ledig, og lyser grønt
     def idle(self):
+        self.sense.clear((0, 255, 0))
+        print("Idle: waiting for user input...")
+        while True:
+            try:
+                user_input = input("Enter y to connect: ").strip().lower()
+                if user_input == 'y':
+                    print("User connected.")
+                    self.stm.send('user_connected')
+                    break
+                else:
+                    print("Invalid input. Type 'y' to connect.")
+            except EOFError:
+                print("Input stream closed. Exiting idle state.")
+                break
+
+    # def idle(self):
+    #     self.sense.stick.direction_middle = None
+    #     self.sense.stick.direction_left = None
+    #     self.sense.stick.direction_right = None
+    #     self.sense.stick.direction_up = None
+    #     self.sense.stick.direction_down = None
+    #     green = (0, 255, 0)
+    #     self.sense.clear(green)
+
+    #     def wait_for_input():
+    #         #try:
+    #         time.sleep(0.1)
+    #         while True:
+    #             time.sleep(0.1)
+    #             try:
+    #                 user_input = input("Enter y to connect : ")
+    #                 if 'y' in user_input.strip().lower():    
+    #                     print("User connected.")
+    #                     self.stm.send('user_connected')
+    #                     break
+    #             except EOFError:
+    #                 print("EOFError has occured")
+    #                 breakpoint
+    #     wait_for_input()
+        # threading.Thread(target=wait_for_input, daemon=True).start()
+        
+   
+        
+    def emergency_contacted(self):
+        print("Playing notified sound")
+        os.system(f"play {NOTIFIED_MP3_PATH}")
+        
+    
+    def cancel_emergency(self):
+        os.system(f"play {CANCELLED_MP3_PATH}")
+
+    #nullstiller både lys og lyd
+    def reset(self):
+        print("Resetting scooter state...")
+
+        # 1. Stop alert state and lights
+        self.emergency = False
+        self.sense.clear((0, 0, 0))
+
+        
+
+        # 3. Cancel any background flags
+        self.quit_flag = False
+
+        # 4. Clear joystick bindings to avoid double-events
         self.sense.stick.direction_middle = None
         self.sense.stick.direction_left = None
         self.sense.stick.direction_right = None
         self.sense.stick.direction_up = None
         self.sense.stick.direction_down = None
-        green = (0, 255, 0)
-        self.sense.clear(green)
-        def wait_for_input():
-            time.sleep(0.5)
-            while True:
-                user_input = input("Enter y to connect : ")
-                if user_input.strip().lower() == 'y':    
-                    print("User connected.")
-                    self.stm.send('user_connected')
-                    break
-        threading.Thread(target=wait_for_input).start()
-        
-    #stopper bare blinkingen
-    def stop_alert(self):
-        self.emergency = False
-        off = (0, 0, 0)
-        self.sense.clear(off)
-        
-    def emergency_contacted(self):
-        print("Playing notified sound")
-        os.system(f"play {NOTIFIED_MP3_PATH}")
 
-    #nullstiller både lys og lyd
-    def reset(self):
-        off = (0, 0, 0)
-        self.sense.clear(off)
-        # try:
-        #     os.system("killall play")
-        # except Exception as e:
-        #     print("Error stopping sound:", e)
+        # 5. Re-enter idle state (blocking, fresh input)
+        print("System is reset. Returning to idle mode.")
 
     def sensor_listening(self):
+        print("listening state")
         self.sense.stick.direction_middle = self.panic_button_pressed
         self.sense.stick.direction_left = self.disconnect_user
         self.sense.stick.direction_right = self.disconnect_user
@@ -158,29 +200,30 @@ class Scooter:
                     break
                     
                 time.sleep(0.1)
-        threading.Thread(target=monitoring).start()
+        threading.Thread(target=monitoring, daemon=True).start()
         
     def panic_button_pressed(self, event):
         if event.action != ACTION_PRESSED:
             return
+
         if event.action == ACTION_PRESSED and self.emergency == False:
             print("Panic button pressed: starting alert mode.")
             self.stm.send('button_pressed')
             self.emergency = True
             return
+            
         if event.action == ACTION_PRESSED and self.emergency == True:
             print("Panic button pressed during alert: cancelling alert and sending cancellation message.")
             message = json.dumps({"cancel_emergency": "cancel_emergency"})
             self.mqtt_client.publish(TOPIC_ALERTS,message)
             os.system("killall play")
-            os.system(f"play {CANCELLED_MP3_PATH}")
             self.stm.send('button_pressed')
             self.emergency = False
             return
 
     def disconnect_user(self, event):
         if event.action == ACTION_PRESSED and (event.direction == "left" or event.direction == "right" or event.direction == "up" or event.direction == "down"):
-            print("dette er en test")
+            print("User disconnected")
             self.stm.send("user_disconnected")
             return
     
@@ -234,7 +277,7 @@ listeningTimeout = {
     "trigger": "timeout_from_server",
     "source": "emergencyTriggered",
     "target": "listening",
-    "effect": "stop_alert; emergency_contacted; sensor_listening; reset",
+    "effect": "emergency_contacted; reset; sensor_listening",
 }
 
 #transition emergencyTriggered --> listening 
@@ -242,7 +285,7 @@ listeningButton = {
     "trigger": "button_pressed",
     "source": "emergencyTriggered",
     "target": "listening",
-    "effect": "stop_alert; sensor_listening; reset",
+    "effect": "cancel_emergency; reset; sensor_listening",
 }
 
 
