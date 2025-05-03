@@ -40,7 +40,7 @@ class Server:
         
     def start_server_timer(self):
         print("Starting timer")
-        self.stm.start_timer('timer', 3000)
+        self.stm.start_timer('timer', 30000)
         
     def stop_server_timer(self):
         print("Stopping timer")
